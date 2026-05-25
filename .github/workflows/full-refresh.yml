@@ -1,0 +1,158 @@
+name: Full refresh
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      pages: ${{ steps.probe.outputs.pages }}
+      total: ${{ steps.probe.outputs.total }}
+      last_page: ${{ steps.probe.outputs.last_page }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v3.2.0
+
+      - name: Probe pagination
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe_json=$(task animethemes:probe)
+          echo "Probe: $probe_json"
+          echo "pages=$(echo "$probe_json" | jq -c '.pages')"     >> "$GITHUB_OUTPUT"
+          echo "total=$(echo "$probe_json" | jq -r '.total')"     >> "$GITHUB_OUTPUT"
+          echo "last_page=$(echo "$probe_json" | jq -r '.lastPage')" >> "$GITHUB_OUTPUT"
+
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - probe
+    if: ${{ needs.probe.outputs.pages != '[]' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        page: ${{ fromJSON(needs.probe.outputs.pages) }}
+    env:
+      # CREATED_AT keeps each page's contents stable across matrix jobs and reruns.
+      ANIMETHEMES_SORT: CREATED_AT
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v3.2.0
+
+      - name: Fetch page
+        shell: bash
+        run: task animethemes:download:page PAGE=${{ matrix.page }}
+
+      - name: Upload page artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: page-${{ matrix.page }}
+          path: .cache/pages/${{ matrix.page }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - probe
+      - download
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v3.2.0
+
+      - name: Download page artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/pages
+          pattern: page-*
+          merge-multiple: true
+
+      - name: Assemble .cache/pages from artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/pages
+          find /tmp/pages -type f -name '*.json' -print0 \
+            | xargs -0 -I{} mv {} .cache/pages/
+          got=$(ls .cache/pages/*.json 2>/dev/null | wc -l)
+          want="${{ needs.probe.outputs.last_page }}"
+          echo "Assembled ${got}/${want} page files."
+          if [ "$got" -ne "$want" ]; then
+            echo "Missing page artifacts; aborting merge." >&2
+            exit 1
+          fi
+
+      - name: Build manifest
+        shell: bash
+        run: task animethemes:manifest
+
+      - name: Commit changes
+        id: auto-commit-action
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          file_pattern: 'data/*.json'
+          commit_message: 'chore(refresh): full animethemes.moe refresh'
+
+      - name: Create release
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(date +%Y.%m.%d)-$GITHUB_RUN_ID
+          gh release create "$tag" --title="$tag 🔄" --generate-notes
+
+      - name: Upload pages artifact
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./data
+
+      - name: Deploy to GitHub Pages
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5
+
