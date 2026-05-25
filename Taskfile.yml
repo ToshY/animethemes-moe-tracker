@@ -1,0 +1,666 @@
+version: '3'
+
+env:
+  GITHUB_PAGES_URL: toshy.github.io/animethemes-moe-tracker
+  ANIMETHEMES_ENDPOINT: https://graphql.animethemes.moe/
+  ANIMETHEMES_DOWNLOAD_WORKERS: '4'
+  ANIMETHEMES_PAGE_SIZE: '100'
+  ANIMETHEMES_HEALTHCHECK_TIMEOUT_SECONDS: '10'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  animethemes:fetch:
+    desc: Fetch and process animethemes.moe data (orchestrator)
+    cmds:
+      - task: animethemes:healthcheck
+      - task: animethemes:download
+      - task: animethemes:manifest
+
+  animethemes:incremental:
+    desc: Incremental refresh — pull the most recently updated anime and merge
+    summary: |
+      Requires: curl, jq, awk, sha256sum
+      Downloads the first `ANIMETHEMES_INCREMENTAL_PAGES` pages of the
+      animePagination query sorted by UPDATED_AT_DESC (default: 1 page = the
+      100 most recently updated anime), then merges the result into the
+      existing data/manifest.json. Anime not seen in this run are preserved.
+
+      For each anime touched:
+        - new (not in manifest)          → file written, manifest entry added
+        - in manifest, sha256 unchanged  → file rewritten with identical bytes,
+                                            timestamps preserved (no-op for git)
+        - in manifest, sha256 changed    → file rewritten, updatedAt bumped
+    silent: true
+    cmds:
+      - task: animethemes:healthcheck
+      - |
+        set -euo pipefail
+
+        pages="${ANIMETHEMES_INCREMENTAL_PAGES:-1}"
+        if ! [[ "$pages" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Invalid ANIMETHEMES_INCREMENTAL_PAGES: ${pages}"
+          exit 1
+        fi
+
+        cache_dir=".cache/pages"
+        rm -rf "$cache_dir"
+        mkdir -p "$cache_dir"
+
+        echo "Incremental fetch: first ${pages} page(s) sorted UPDATED_AT_DESC."
+        i=1
+        while [ "$i" -le "$pages" ]; do
+          task animethemes:download:page PAGE="$i"
+          i=$((i + 1))
+        done
+      - task: animethemes:manifest
+
+  animethemes:healthcheck:
+    desc: Fast availability check for animethemes.moe GraphQL endpoint
+    summary: |
+      Requires: curl, jq
+      Performs a minimal `{ __typename }` query and exits early on failure.
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        timeout="${ANIMETHEMES_HEALTHCHECK_TIMEOUT_SECONDS:-10}"
+        echo "Healthcheck: probing ${ANIMETHEMES_ENDPOINT}..."
+
+        payload='{"query":"query{__typename}"}'
+
+        response_file="$(mktemp)"
+        trap 'rm -f "$response_file"' EXIT
+
+        curl --fail \
+          --max-time "$timeout" \
+          --connect-timeout 5 \
+          --http1.1 \
+          -sS \
+          -X POST "${ANIMETHEMES_ENDPOINT}" \
+          -H 'Content-Type: application/json' \
+          -H 'Accept: application/json' \
+          -H "Origin: ${ANIMETHEMES_ENDPOINT%/}" \
+          -H "Referer: ${ANIMETHEMES_ENDPOINT}" \
+          -H 'User-Agent: animethemes-moe-tracker/1.0' \
+          --data "$payload" \
+          -o "$response_file" || {
+            echo "Healthcheck failed: animethemes.moe GraphQL is not reachable right now."
+            exit 1
+          }
+
+        typename=$(jq -r '.data.__typename // "missing"' "$response_file" 2>/dev/null || echo invalid)
+        if [ "$typename" != "Query" ]; then
+          echo "Healthcheck failed: unexpected GraphQL response:"
+          cat "$response_file"
+          exit 1
+        fi
+
+        echo "Healthcheck OK."
+
+  animethemes:probe:
+    desc: Probe the animethemes.moe GraphQL endpoint for pagination info (page 1)
+    summary: |
+      Requires: curl, jq
+      Prints a JSON object: {"lastPage": N, "total": M, "pages": [1,2,...,N]}
+      Useful for driving CI matrix fan-out.
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
+
+        query=$(cat <<'GQL'
+        query Probe($page: Int!, $first: Int!) {
+          animePagination(first: $first, page: $page, sort: CREATED_AT) {
+            paginatorInfo {
+              currentPage
+              lastPage
+              total
+            }
+          }
+        }
+        GQL
+        )
+
+        payload=$(
+          jq -nc \
+            --arg query "$query" \
+            --argjson page 1 \
+            --argjson first "$page_size" \
+            '{query:$query,variables:{page:$page,first:$first},operationName:"Probe"}'
+        )
+
+        response_file="$(mktemp)"
+        trap 'rm -f "$response_file"' EXIT
+
+        curl --fail \
+          --max-time 30 \
+          --connect-timeout 10 \
+          --http1.1 \
+          -sS \
+          -X POST "${ANIMETHEMES_ENDPOINT}" \
+          -H 'Content-Type: application/json' \
+          -H 'Accept: application/json' \
+          -H "Origin: ${ANIMETHEMES_ENDPOINT%/}" \
+          -H "Referer: ${ANIMETHEMES_ENDPOINT}" \
+          -H 'User-Agent: animethemes-moe-tracker/1.0' \
+          --data "$payload" \
+          -o "$response_file"
+
+        last_page=$(jq -r '.data.animePagination.paginatorInfo.lastPage // "null"' "$response_file" 2>/dev/null || echo null)
+        if [ "$last_page" = "null" ] || [ -z "$last_page" ]; then
+          echo "Probe failed:" >&2
+          cat "$response_file" >&2
+          exit 1
+        fi
+
+        jq -c '
+          .data.animePagination.paginatorInfo as $p
+          | {lastPage: $p.lastPage, total: $p.total, pages: [range(1; $p.lastPage + 1)]}
+        ' "$response_file"
+
+  animethemes:download:page:
+    desc: Download a single GraphQL page into the cache
+    summary: |
+      Requires: curl, jq
+      Usage: task animethemes:download:page PAGE=1
+      Writes .cache/pages/<page>.json
+    requires:
+      vars:
+        - PAGE
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        page="{{.PAGE}}"
+        if ! [[ "$page" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Invalid PAGE. Example: task animethemes:download:page PAGE=1"
+          exit 1
+        fi
+
+        page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
+        cache_dir=".cache/pages"
+        mkdir -p "$cache_dir"
+        outfile="$cache_dir/${page}.json"
+
+        query=$(cat <<'GQL'
+        query GetAnime($page: Int!, $first: Int!) {
+          animePagination(
+            first: $first
+            page: $page
+            sort: CREATED_AT
+          ) {
+            paginatorInfo {
+              currentPage
+              lastPage
+              hasMorePages
+              total
+            }
+
+            data {
+              id
+              name
+              slug
+              synopsis
+              format
+              season
+              year
+              createdAt
+              updatedAt
+
+              resources {
+                nodes {
+                  site
+                  externalId
+                }
+              }
+
+              images(first: 100) {
+                nodes {
+                  id
+                  facet
+                  path
+                }
+              }
+
+              studios(first: 100) {
+                nodes {
+                  id
+                  name
+                  slug
+                }
+              }
+
+              series(first: 100) {
+                nodes {
+                  id
+                  name
+                  slug
+                }
+              }
+
+              animethemes(first: 1000) {
+                id
+                slug
+                type
+                sequence
+
+                song {
+                  id
+                  title
+                  titleNative
+                }
+
+                animethemeentries(first: 1000) {
+                  id
+                  version
+                  episodes
+                  nsfw
+                  spoiler
+
+                  videos(first: 1000) {
+                    nodes {
+                      id
+                      basename
+                      filename
+                      link
+                      mimetype
+                      size
+                      resolution
+                      nc
+                      subbed
+                      lyrics
+                      overlap
+                      source
+                      tags
+
+                      audio {
+                        id
+                        basename
+                        filename
+                        link
+                        mimetype
+                        size
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        GQL
+        )
+
+        payload=$(
+          jq -nc \
+            --arg query "$query" \
+            --argjson page "$page" \
+            --argjson first "$page_size" \
+            '{query:$query,variables:{page:$page,first:$first},operationName:"GetAnime"}'
+        )
+
+        echo "Fetching page ${page}..."
+
+        attempt=1
+        max_attempts=4
+        tmp_response="$(mktemp)"
+        trap 'rm -f "$tmp_response"' EXIT
+        success=0
+        while [ "$attempt" -le "$max_attempts" ]; do
+          if curl --fail \
+              --max-time 90 \
+              --connect-timeout 10 \
+              --http1.1 \
+              -sS \
+              -X POST "${ANIMETHEMES_ENDPOINT}" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              -H "Origin: ${ANIMETHEMES_ENDPOINT%/}" \
+              -H "Referer: ${ANIMETHEMES_ENDPOINT}" \
+              -H 'User-Agent: animethemes-moe-tracker/1.0' \
+              --data "$payload" \
+              -o "$tmp_response"; then
+            success=1
+            break
+          fi
+          echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          attempt=$((attempt + 1))
+          sleep $((attempt * 2))
+        done
+
+        if [ "$success" -ne 1 ]; then
+          echo "Page ${page}: giving up after ${max_attempts} attempts." >&2
+          exit 1
+        fi
+
+        data_type=$(jq -r '(.data.animePagination.data | type) // "missing"' "$tmp_response" 2>/dev/null || echo invalid)
+        if [ "$data_type" != "array" ]; then
+          echo "Page ${page}: GraphQL response did not contain data.animePagination.data array (got: ${data_type}, $(wc -c < "$tmp_response") bytes)." >&2
+          head -c 500 "$tmp_response" >&2
+          echo >&2
+          exit 1
+        fi
+
+        has_errors=$(jq -r '(.errors // null) | tojson' "$tmp_response" 2>/dev/null || echo null)
+        if [ "$has_errors" != "null" ]; then
+          echo "Page ${page}: GraphQL returned partial errors (continuing): ${has_errors}" >&2
+        fi
+
+        jq -c . "$tmp_response" > "$outfile"
+        count=$(jq '.data.animePagination.data | length' "$outfile")
+        last_page=$(jq '.data.animePagination.paginatorInfo.lastPage' "$outfile")
+        echo "Page ${page}/${last_page}: ${count} entries -> ${outfile}"
+
+  animethemes:download:
+    desc: Download all GraphQL pages in parallel
+    summary: |
+      Requires: curl, jq, xargs
+      Probes pagination, then downloads every page into .cache/pages/.
+      Worker count is controlled by ANIMETHEMES_DOWNLOAD_WORKERS (default: 4).
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        cache_dir=".cache/pages"
+        rm -rf "$cache_dir"
+        mkdir -p "$cache_dir"
+
+        probe_json=$(task animethemes:probe)
+        last_page=$(echo "$probe_json" | jq -r '.lastPage')
+        total=$(echo "$probe_json" | jq -r '.total')
+
+        if ! [[ "$last_page" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Probe returned no usable lastPage."
+          exit 1
+        fi
+
+        workers="${ANIMETHEMES_DOWNLOAD_WORKERS:-4}"
+        if ! [[ "$workers" =~ ^[1-9][0-9]*$ ]]; then
+          workers=4
+        fi
+        if [ "$workers" -gt "$last_page" ]; then
+          workers="$last_page"
+        fi
+
+        echo "Total anime: ${total}. Pages: ${last_page}. Workers: ${workers}."
+
+        # Write the GraphQL query and a self-contained worker script to a
+        # temp dir to avoid Task per-invocation overhead inside xargs.
+        work_dir="$(mktemp -d)"
+        trap 'rm -rf "$work_dir"' EXIT
+
+        query_file="$work_dir/query.graphql"
+        cat > "$query_file" <<'GQL'
+        query GetAnime($page: Int!, $first: Int!) {
+          animePagination(
+            first: $first
+            page: $page
+            sort: CREATED_AT
+          ) {
+            paginatorInfo { currentPage lastPage hasMorePages total }
+            data {
+              id name slug synopsis format season year createdAt updatedAt
+              resources { nodes { site externalId } }
+              images(first: 100) { nodes { id facet path } }
+              studios(first: 100) { nodes { id name slug } }
+              series(first: 100) { nodes { id name slug } }
+              animethemes(first: 1000) {
+                id slug type sequence
+                song { id title titleNative }
+                animethemeentries(first: 1000) {
+                  id version episodes nsfw spoiler
+                  videos(first: 1000) {
+                    nodes {
+                      id basename filename link mimetype size resolution
+                      nc subbed lyrics overlap source tags
+                      audio { id basename filename link mimetype size }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        GQL
+
+        worker="$work_dir/fetch_page.sh"
+        cat > "$worker" <<'WORKER'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        page="$1"
+        endpoint="${ANIMETHEMES_ENDPOINT:?}"
+        page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
+        cache_dir="${CACHE_DIR:?}"
+        query_file="${QUERY_FILE:?}"
+
+        outfile="$cache_dir/${page}.json"
+        tmp_response="$(mktemp)"
+        trap 'rm -f "$tmp_response"' EXIT
+
+        payload="$(jq -nc \
+          --rawfile query "$query_file" \
+          --argjson page "$page" \
+          --argjson first "$page_size" \
+          '{query:$query,variables:{page:$page,first:$first},operationName:"GetAnime"}')"
+
+        attempt=1
+        max_attempts=4
+        success=0
+        while [ "$attempt" -le "$max_attempts" ]; do
+          if curl --fail \
+              --max-time 90 \
+              --connect-timeout 10 \
+              --http1.1 \
+              -sS \
+              -X POST "$endpoint" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              -H "Origin: ${endpoint%/}" \
+              -H "Referer: $endpoint" \
+              -H 'User-Agent: animethemes-moe-tracker/1.0' \
+              --data "$payload" \
+              -o "$tmp_response"; then
+            success=1
+            break
+          fi
+          echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          attempt=$((attempt + 1))
+          sleep $((attempt * 2))
+        done
+
+        if [ "$success" -ne 1 ]; then
+          echo "Page ${page}: giving up after ${max_attempts} attempts." >&2
+          exit 1
+        fi
+
+        data_type="$(jq -r '(.data.animePagination.data | type) // "missing"' "$tmp_response" 2>/dev/null || echo invalid)"
+        if [ "$data_type" != "array" ]; then
+          echo "Page ${page}: GraphQL response did not contain data array (got: $data_type)." >&2
+          head -c 500 "$tmp_response" >&2
+          echo >&2
+          exit 1
+        fi
+
+        jq -c . "$tmp_response" > "$outfile"
+        count=$(jq '.data.animePagination.data | length' "$outfile")
+        echo "Page ${page}: ${count} entries"
+        WORKER
+        chmod +x "$worker"
+
+        export ANIMETHEMES_ENDPOINT
+        export ANIMETHEMES_PAGE_SIZE
+        export CACHE_DIR="$cache_dir"
+        export QUERY_FILE="$query_file"
+
+        seq 1 "$last_page" | xargs -P "$workers" -n 1 "$worker"
+
+        downloaded=$(ls "$cache_dir"/*.json 2>/dev/null | wc -l)
+        echo "Downloaded ${downloaded}/${last_page} pages."
+        if [ "$downloaded" -ne "$last_page" ]; then
+          echo "Some pages failed to download."
+          exit 1
+        fi
+
+  animethemes:manifest:
+    desc: Process downloaded GraphQL pages and build manifest
+    summary: |
+      Requires: jq, awk, sha256sum
+      Reads .cache/pages/*.json, writes data/<id>.json (minified),
+      and builds data/manifest.json with sha256 checksums + MAL ID lookups.
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        cache_dir=".cache/pages"
+        out_dir="./data"
+        mkdir -p "$out_dir"
+
+        if [ -z "$(ls "$cache_dir"/*.json 2>/dev/null)" ]; then
+          echo "No pages found in ${cache_dir}. Run 'task animethemes:download' first."
+          exit 1
+        fi
+
+        manifest_path="$out_dir/manifest.json"
+        now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        work_dir="$(mktemp -d)"
+        trap 'rm -rf "$work_dir"' EXIT
+
+        # 1) Flatten all pages into one JSONL stream of unique anime
+        #    (deduped by id; CREATED_AT sort means the first occurrence
+        #    is already the freshest in the same fetch).
+        flat_jsonl="$work_dir/anime.jsonl"
+        jq -s -c '
+          [ .[] | .data.animePagination.data[] ]
+          | group_by(.id)
+          | map(.[0])
+          | .[]
+        ' "$cache_dir"/*.json > "$flat_jsonl"
+        flat_count=$(wc -l < "$flat_jsonl")
+        echo "Flattened ${flat_count} unique anime from pages."
+
+        # 2) Fan out: write each anime as data/<id>.json via a single awk pass
+        awk -v dir="$out_dir" '
+          {
+            if (match($0, /"id":[0-9]+/)) {
+              id = substr($0, RSTART + 5, RLENGTH - 5)
+              path = dir "/" id ".json"
+              print $0 > path
+              close(path)
+            }
+          }
+        ' "$flat_jsonl"
+
+        # 3) Compute sha256 of every data/<id>.json in one pass
+        sha_file="$work_dir/sha256.tsv"
+        (cd "$out_dir" && find . -maxdepth 1 -type f -name '[0-9]*.json' -print0 \
+          | xargs -0 sha256sum) \
+          | awk '{ sub(/^\.\//, "", $2); sub(/\.json$/, "", $2); print $2 "\t" $1 }' \
+          > "$sha_file"
+
+         # 4) Build a JSONL of {id, malID} from the flat anime stream
+         meta_jsonl="$work_dir/meta.jsonl"
+         jq -c '
+           {
+             id: .id,
+             malID: ((.resources.nodes // []) | map(select(.site == "MAL")) | (.[0].externalId // null))
+           }
+         ' "$flat_jsonl" > "$meta_jsonl"
+
+         # 5) Convert shas TSV to JSON array
+         sha_json="$work_dir/sha256.json"
+         jq -R -s '
+           split("\n") | map(select(length>0))
+           | map(split("\t") | {id: (.[0] | tonumber), sha256: .[1]})
+         ' "$sha_file" > "$sha_json"
+
+        meta_json="$work_dir/meta.json"
+        jq -s '.' "$meta_jsonl" > "$meta_json"
+
+        old_json="$work_dir/old.json"
+        if [ -f "$manifest_path" ]; then
+          cp "$manifest_path" "$old_json"
+        else
+          echo "[]" > "$old_json"
+        fi
+
+         # 6) Build merged manifest:
+         #    - entries seen in this run get fresh sha + url (timestamps preserved
+         #      when sha is unchanged)
+         #    - entries NOT seen in this run are kept verbatim from the existing
+         #      manifest, so partial/incremental cache runs are safe
+         jq -n \
+           --slurpfile meta "$meta_json" \
+           --slurpfile shas "$sha_json" \
+           --slurpfile old "$old_json" \
+           --arg now "$now" \
+           --arg base "https://${GITHUB_PAGES_URL}" \
+           '
+             ($meta[0]) as $entries
+             | (($shas[0]) | map({key: (.id|tostring), value: .sha256}) | from_entries) as $sha_by_id
+             | (($old[0])  | map({key: (.id|tostring), value: .}) | from_entries) as $old_by_id
+             | ($entries | map({key: (.id|tostring), value: true}) | from_entries) as $seen
+             | (
+                 $entries
+                 | map(
+                     . as $e
+                     | ($sha_by_id[$e.id|tostring]) as $sha
+                     | ($old_by_id[$e.id|tostring] // null) as $prev
+                     | {
+                         id: $e.id,
+                         malID: $e.malID,
+                         url: ($base + "/" + ($e.id|tostring) + ".json"),
+                         sha256: $sha,
+                         createdAt: (if $prev == null then $now else $prev.createdAt end),
+                         updatedAt: (if $prev == null then $now
+                                     elif $prev.sha256 == $sha then $prev.updatedAt
+                                     else $now end)
+                       }
+                   )
+               )
+               + (($old[0]) | map(select($seen[.id|tostring] | not)))
+             | sort_by(.id)
+           ' > "$manifest_path"
+
+         # 7) Stats: bucketed by IDs actually seen in this run
+         stats=$(jq -n \
+           --slurpfile new "$manifest_path" \
+           --slurpfile old "$old_json" \
+           --slurpfile meta "$meta_json" \
+           '
+             ($old[0] | map({key:(.id|tostring), value:.sha256}) | from_entries) as $old_sha
+             | ($meta[0] | map({key:(.id|tostring), value:true}) | from_entries) as $seen
+             | ($new[0] | map({key:(.id|tostring), value:.sha256}) | from_entries) as $new_sha
+             | {
+                 total:     ($new[0] | length),
+                 new:       ($meta[0] | map(select($old_sha[.id|tostring] == null)) | length),
+                 updated:   ($meta[0] | map(select($old_sha[.id|tostring] != null and $old_sha[.id|tostring] != $new_sha[.id|tostring])) | length),
+                 unchanged: ($meta[0] | map(select($old_sha[.id|tostring] == $new_sha[.id|tostring])) | length),
+                 kept:      ($new[0] | map(select($seen[.id|tostring] | not)) | length)
+               }
+           ')
+        total=$(echo "$stats" | jq -r '.total')
+        new_count=$(echo "$stats" | jq -r '.new')
+        updated_count=$(echo "$stats" | jq -r '.updated')
+        unchanged_count=$(echo "$stats" | jq -r '.unchanged')
+        kept_count=$(echo "$stats" | jq -r '.kept')
+        echo "Done. Manifest: ${total} entries (${new_count} new, ${updated_count} updated, ${unchanged_count} unchanged, ${kept_count} kept from previous run)."
+
+        rm -rf "$cache_dir"
+
+  animethemes:clean:
+    desc: Remove cache and generated data directories
+    silent: true
+    cmds:
+      - |
+        rm -rf .cache/pages
+        rm -rf ./data
+        echo "Cleaned .cache/pages and data/."

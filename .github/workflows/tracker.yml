@@ -1,0 +1,64 @@
+name: Tracker (incremental)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+on:
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: Number of UPDATED_AT_DESC pages to pull (100 anime per page).
+        required: false
+        default: "1"
+  schedule:
+    - cron: '0 0,6,12,18 * * *'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  incremental:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ANIMETHEMES_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v3.2.0
+      - name: Run incremental fetch
+        shell: bash
+        run: task animethemes:incremental
+      - name: Commit changes
+        id: auto-commit-action
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          file_pattern: 'data/*.json'
+          commit_message: 'chore(tracker): incremental update'
+      - name: Create release
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(date +%Y.%m.%d)-$GITHUB_RUN_ID
+          triggered_by="🤖"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            triggered_by="✍️"
+          fi
+          gh release create "$tag" --title="$tag $triggered_by" --generate-notes
+      - name: Upload pages artifact
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./data
+      - name: Deploy to GitHub Pages
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5
