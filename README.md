@@ -37,7 +37,7 @@ Per-anime files are only overwritten when their `sha256` changes; otherwise `upd
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `tracker.yml` | cron `0 0,6,12,18 * * *` + `workflow_dispatch` | Pulls the first N pages of `animePagination(sort: UPDATED_AT_DESC)` (default 1 page = 100 anime) and merges them into the manifest. Cheap, fast, idempotent. |
+| `tracker.yml` | cron `0 0 * * *` + `workflow_dispatch` | Pulls the first N pages of `animePagination(sort: UPDATED_AT_DESC)` (default 1 page = 100 anime) and merges them into the manifest. Cheap, fast, idempotent. |
 | `full-refresh.yml` | `workflow_dispatch` only | Probes pagination, fans out a matrix job per page (~49 jobs × 100 anime), merges all artifacts and rebuilds the manifest. |
 
 Scheduled cron times may be [delayed](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule) by GitHub Actions.
@@ -64,7 +64,7 @@ This repository is a **metadata index**, not a media archive:
 - The published JSON files contain anime, theme, song, entry and video **metadata** (titles, IDs, slugs, resolutions, source flags, etc.) and **URLs** that point back to animethemes.moe's own CDN.
 - No video or audio files are downloaded, re-hosted or otherwise redistributed by this project. Playback always happens on animethemes.moe's infrastructure.
 - The tracker is a small, non-commercial, read-only consumer of the public GraphQL API. It is not a search, streaming or download service and is not intended to compete with animethemes.moe or themes.moe.
-- API usage is intentionally light: a single page of recently updated anime every 6 hours (incremental), with full refreshes only on manual request and paginated at the API's standard page size.
+- API usage is intentionally light: a single page of recently updated anime daily (incremental), with full refreshes only on manual request and paginated at the API's standard page size.
 
 If you are building something that needs **bulk media** rather than metadata, please use the official [AnimeThemes.moe OP/ED Collection Full Backup](https://animethemes.moe/faq) instead of scraping the CDN.
 
