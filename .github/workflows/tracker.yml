@@ -10,7 +10,7 @@ on:
         required: false
         default: "1"
   schedule:
-    - cron: '0 0,6,12,18 * * *'
+    - cron: '0 0 * * *'
 permissions:
   contents: write
   pages: write

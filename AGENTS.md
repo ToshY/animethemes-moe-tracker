@@ -26,7 +26,7 @@ loss in the switch.
 
 ### Incremental (cron / manual)
 
-`.github/workflows/tracker.yml` runs every 6 hours, and on manual dispatch:
+`.github/workflows/tracker.yml` runs daily, and on manual dispatch:
 
 1. Runs `task animethemes:incremental`, which:
    - hits `healthcheck` (early-exits if the GraphQL endpoint is down)
