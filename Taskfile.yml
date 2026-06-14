@@ -45,11 +45,16 @@ tasks:
           exit 1
         fi
 
+        # This is the "what changed recently?" path: pull the most recently
+        # UPDATED anime first. Exported so the nested `download:page` calls
+        # below inherit it (override by setting ANIMETHEMES_SORT yourself).
+        export ANIMETHEMES_SORT="${ANIMETHEMES_SORT:-UPDATED_AT_DESC}"
+
         cache_dir=".cache/pages"
         rm -rf "$cache_dir"
         mkdir -p "$cache_dir"
 
-        echo "Incremental fetch: first ${pages} page(s) sorted UPDATED_AT_DESC."
+        echo "Incremental fetch: first ${pages} page(s) sorted ${ANIMETHEMES_SORT}."
         i=1
         while [ "$i" -le "$pages" ]; do
           task animethemes:download:page PAGE="$i"
@@ -169,6 +174,8 @@ tasks:
     summary: |
       Requires: curl, jq
       Usage: task animethemes:download:page PAGE=1
+      Sort: reads $ANIMETHEMES_SORT (default CREATED_AT). The incremental cron
+      sets UPDATED_AT_DESC so the most recently updated anime are fetched first.
       Writes .cache/pages/<page>.json
     requires:
       vars:
@@ -184,6 +191,18 @@ tasks:
           exit 1
         fi
 
+        # Sort column for animePagination. Defaults to CREATED_AT (stable page
+        # contents for full-refresh matrix reruns); the incremental cron sets
+        # ANIMETHEMES_SORT=UPDATED_AT_DESC to pull the freshest-updated anime.
+        sort_col="${ANIMETHEMES_SORT:-CREATED_AT}"
+        case "$sort_col" in
+          CREATED_AT|CREATED_AT_DESC|UPDATED_AT|UPDATED_AT_DESC) ;;
+          *)
+            echo "Invalid ANIMETHEMES_SORT: '${sort_col}' (allowed: CREATED_AT, CREATED_AT_DESC, UPDATED_AT, UPDATED_AT_DESC)." >&2
+            exit 1
+            ;;
+        esac
+
         page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
         cache_dir=".cache/pages"
         mkdir -p "$cache_dir"
@@ -194,7 +213,7 @@ tasks:
           animePagination(
             first: $first
             page: $page
-            sort: CREATED_AT
+            sort: __SORT__
           ) {
             paginatorInfo {
               currentPage
@@ -297,6 +316,7 @@ tasks:
         }
         GQL
         )
+        query=${query//__SORT__/$sort_col}
 
         payload=$(
           jq -nc \
@@ -392,6 +412,18 @@ tasks:
 
         echo "Total anime: ${total}. Pages: ${last_page}. Workers: ${workers}."
 
+        # Sort column for animePagination (default CREATED_AT keeps page
+        # contents stable across reruns). Honors ANIMETHEMES_SORT for parity
+        # with the incremental and full-refresh paths.
+        sort_col="${ANIMETHEMES_SORT:-CREATED_AT}"
+        case "$sort_col" in
+          CREATED_AT|CREATED_AT_DESC|UPDATED_AT|UPDATED_AT_DESC) ;;
+          *)
+            echo "Invalid ANIMETHEMES_SORT: '${sort_col}' (allowed: CREATED_AT, CREATED_AT_DESC, UPDATED_AT, UPDATED_AT_DESC)." >&2
+            exit 1
+            ;;
+        esac
+
         # Write the GraphQL query and a self-contained worker script to a
         # temp dir to avoid Task per-invocation overhead inside xargs.
         work_dir="$(mktemp -d)"
@@ -403,7 +435,7 @@ tasks:
           animePagination(
             first: $first
             page: $page
-            sort: CREATED_AT
+            sort: __SORT__
           ) {
             paginatorInfo { currentPage lastPage hasMorePages total }
             data {
@@ -430,6 +462,7 @@ tasks:
           }
         }
         GQL
+        sed -i "s/__SORT__/${sort_col}/" "$query_file"
 
         worker="$work_dir/fetch_page.sh"
         cat > "$worker" <<'WORKER'
