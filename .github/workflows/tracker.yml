@@ -23,7 +23,7 @@ jobs:
       ANIMETHEMES_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '1' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
       - name: Install Task

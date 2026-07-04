@@ -22,7 +22,7 @@ jobs:
       last_page: ${{ steps.probe.outputs.last_page }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Task
         uses: go-task/setup-task@v2
@@ -60,7 +60,7 @@ jobs:
       ANIMETHEMES_SORT: CREATED_AT
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Task
         uses: go-task/setup-task@v2
@@ -91,7 +91,7 @@ jobs:
       - download
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
 
