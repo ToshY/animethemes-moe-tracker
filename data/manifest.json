@@ -38747,9 +38747,9 @@
     "id": 4863,
     "malID": 62430,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4863.json",
-    "sha256": "872a85c1005179712207359c24f1638bae32f8c1e044de8c4839cb241de44d27",
+    "sha256": "033b368f30d7f5e2caa7d8ef58f23d38763666e6b689535515b5af487cf15d2f",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-06-30T02:26:53Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4864,
@@ -38763,17 +38763,17 @@
     "id": 4865,
     "malID": 59741,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4865.json",
-    "sha256": "7cb289f66381e4c0b3039c264e53421c3e42445cfb24a410e72cb63b05ee6326",
+    "sha256": "c437aa744aca28ec9a380c0972f73ab2a1277401658ae75a50b27e32bcce7da0",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-07-03T01:56:01Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4866,
     "malID": 63403,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4866.json",
-    "sha256": "d235a4d54ce69af36d10d5b5f86d40915d1a52a2674bb57efba2298383644c8e",
+    "sha256": "cf076f62ef9df2ed4c1f77e14d75084f1c52e15a1ea6948b42ba98fcdfb0250f",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-07-03T01:56:01Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4867,
@@ -38803,9 +38803,9 @@
     "id": 4870,
     "malID": 62078,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4870.json",
-    "sha256": "c6121bd255e74320e68d09206456597155ebbe85fee3ed22f5cd9203c4e9f837",
+    "sha256": "537489692977eb0dd66cb33c6ed3f82b7b147f147e305208ffbc6557f8b55d39",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-06-30T02:26:53Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4871,
@@ -38827,17 +38827,17 @@
     "id": 4873,
     "malID": 63817,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4873.json",
-    "sha256": "beab78a541f6e09a781a89d0d50ef7d8ef0b211d5ea1d966a2a8a6b7f2b2bc82",
+    "sha256": "c297bab7fb6b9cb16c687cd6708778b3751eed683bb23acb82eef46438aeb62e",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-06-30T02:26:53Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4874,
     "malID": 63468,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4874.json",
-    "sha256": "08d916968ef86e94ed67a5f3842dd2614fe28c85cee31c7fb0c676d65adff4d5",
+    "sha256": "aa2a8a87b7021e5ec48908e3f2f6ca1aed6f6cfd98566ca3304686f0a5be2fdc",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-06-30T02:26:53Z"
+    "updatedAt": "2026-07-04T01:55:27Z"
   },
   {
     "id": 4875,
@@ -39246,5 +39246,13 @@
     "sha256": "e001cc9e004ba3f2aa4d84cf7e37b2985549584896eb471f47757851c0746574",
     "createdAt": "2026-07-01T02:32:48Z",
     "updatedAt": "2026-07-01T02:32:48Z"
+  },
+  {
+    "id": 4926,
+    "malID": 62981,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4926.json",
+    "sha256": "75f500f0b8da2da30d74e29532c234ee28ba0def840cd0421cc4707f6a1bb5f2",
+    "createdAt": "2026-07-04T01:55:27Z",
+    "updatedAt": "2026-07-04T01:55:27Z"
   }
 ]
