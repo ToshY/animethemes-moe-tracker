@@ -38691,9 +38691,9 @@
     "id": 4856,
     "malID": 59193,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4856.json",
-    "sha256": "3212d8b40bca5d425d31a55f3802f0f5a90d9e7e1957c245eaf05a34f52b5dc5",
+    "sha256": "0ad5644a9d229d11da39d7f5cd0433fcd6bb1aaa20a4e91733cc7408bd65243e",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-07-15T01:21:52Z"
+    "updatedAt": "2026-07-20T01:59:43Z"
   },
   {
     "id": 4857,
@@ -38755,9 +38755,9 @@
     "id": 4864,
     "malID": 63508,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4864.json",
-    "sha256": "e087aa76b0aa3ceacb52b12b1657ef714d77d82e6d4684a17358bfae9b71b1a2",
+    "sha256": "39b5ae686f81786965ffb2937bc01b9695463edf2e28b4cc1f5cf95897d1c0d5",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-07-03T01:56:01Z"
+    "updatedAt": "2026-07-20T01:59:43Z"
   },
   {
     "id": 4865,
@@ -39211,9 +39211,9 @@
     "id": 4921,
     "malID": 61240,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4921.json",
-    "sha256": "a61ed8783b3da98b74f7614eeeb42b70b4b3ddd6d700cdc8ee3eb149031aca52",
+    "sha256": "24dff43bfc09efd58aedc6a1d6ba7a5aa0e595b10800fee033540c785a29b3dc",
     "createdAt": "2026-06-30T02:26:53Z",
-    "updatedAt": "2026-07-15T01:21:52Z"
+    "updatedAt": "2026-07-20T01:59:43Z"
   },
   {
     "id": 4922,
@@ -39366,5 +39366,21 @@
     "sha256": "e991e0eacade9ea36c38c7c0934823f10eda345e1dbe2b113d492d73aed41ae6",
     "createdAt": "2026-07-16T01:42:31Z",
     "updatedAt": "2026-07-16T01:42:31Z"
+  },
+  {
+    "id": 4941,
+    "malID": 62079,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4941.json",
+    "sha256": "74207590798d4d96ca9bd7dc8bfb887bf04684eecf41b13a4435b26f9bb52c95",
+    "createdAt": "2026-07-20T01:59:43Z",
+    "updatedAt": "2026-07-20T01:59:43Z"
+  },
+  {
+    "id": 4942,
+    "malID": 63641,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4942.json",
+    "sha256": "a5b765bb7d46edcfb2240e1f59cff652ebebfea2bc42a610d3bf45bc901f7eee",
+    "createdAt": "2026-07-20T01:59:43Z",
+    "updatedAt": "2026-07-20T01:59:43Z"
   }
 ]
