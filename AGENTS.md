@@ -50,6 +50,28 @@ loss in the switch.
    `.cache/pages/`, runs `task animethemes:manifest`, commits, releases,
    deploys Pages. Skips commit/release/deploy when no changes were detected.
 
+### Reconcile (weekly cron / manual)
+
+`.github/workflows/reconcile.yml` answers "does the manifest still match
+upstream?" without paying for a full fetch:
+
+1. Runs `task animethemes:reconcile` — sweeps every page with an id-only query
+   (~1 KB per page vs ~600 KB for a data page) and diffs the upstream id set
+   against `data/manifest.json`.
+2. Writes a step summary and uploads `.cache/reconcile.json` as an artifact.
+   **Orphans never fail the run** — the task exits 0 when it finds them, and
+   non-zero only if the sweep was incomplete (a partial sweep would report
+   false orphans).
+3. Deletion is opt-in: dispatch manually with `prune=true` to run
+   `animethemes:prune`, which commits the deletions and redeploys Pages so the
+   removed files stop being served.
+
+Why the manifest keeps unseen entries at all: `animethemes:manifest` preserves
+ids it did not see in a run, which is what makes the incremental path safe (it
+sees 100 of ~4.9k anime; pruning there would delete almost everything). That
+also means genuinely-removed anime linger, which is exactly what reconcile
+surfaces.
+
 ## Taskfile tasks
 
 | Task | Purpose |
@@ -61,6 +83,8 @@ loss in the switch.
 | `animethemes:manifest` | flattens `.cache/pages/*.json`, writes `data/<id>.json` and merges `data/manifest.json` |
 | `animethemes:incremental` | healthcheck → first `ANIMETHEMES_INCREMENTAL_PAGES` pages (`UPDATED_AT_DESC`) → manifest merge |
 | `animethemes:fetch` | healthcheck → all pages (sequential) → manifest |
+| `animethemes:reconcile` | id-only sweep of all pages, diffs upstream ids against the manifest, writes `.cache/reconcile.json`; exits 0 when orphans exist |
+| `animethemes:prune` | deletes orphaned `data/<id>.json` + manifest entries; needs `PRUNE=1` and a fresh reconcile report |
 | `animethemes:clean` | wipes `.cache/pages` and `data/` |
 
 Environment / variables:
@@ -72,6 +96,9 @@ Environment / variables:
 - `ANIMETHEMES_INCREMENTAL_PAGES` (`1`) — number of `UPDATED_AT_DESC` pages for the cron job.
 - `ANIMETHEMES_SORT` (`CREATED_AT`) — per-page sort. Use `UPDATED_AT_DESC` for "what changed recently?" runs; use `CREATED_AT` for CI matrix so page contents are stable across reruns.
 - `PAGE` — required Task var for `animethemes:download:page`.
+- `PRUNE` (unset) — Task var for `animethemes:prune`; must be `1`/`true` to delete anything, otherwise it dry-runs.
+- `ANIMETHEMES_PRUNE_MAX_PERCENT` (`1`) — prune aborts if orphans exceed this share of the manifest.
+- `ANIMETHEMES_PRUNE_MAX_REPORT_AGE` (`3600`) — prune refuses a `.cache/reconcile.json` older than this many seconds.
 
 No parallelism inside the Taskfile by design: parallelism lives in the CI
 matrix (`full-refresh.yml`), so the local tasks stay simple, predictable
@@ -106,6 +133,9 @@ task animethemes:incremental                      # mirror what cron does
 ANIMETHEMES_INCREMENTAL_PAGES=5 task animethemes:incremental
 task animethemes:download:page PAGE=1             # one page
 task animethemes:fetch                            # full local rebuild (~3 min)
+task animethemes:reconcile                        # what drifted from upstream?
+task animethemes:prune                            # dry-run the orphan deletion
+task animethemes:prune PRUNE=1                    # actually delete orphans
 task animethemes:clean                            # nuke .cache/pages and data/
 ```
 
