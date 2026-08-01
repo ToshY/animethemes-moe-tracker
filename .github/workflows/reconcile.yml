@@ -1,0 +1,126 @@
+name: Reconcile (orphan check)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      prune:
+        description: Delete orphaned entries (data/<id>.json + manifest entry).
+        type: boolean
+        required: false
+        default: false
+      max_percent:
+        description: Abort the prune if orphans exceed this percent of the manifest.
+        required: false
+        default: "1"
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install jq
+        uses: dcarbone/install-jq-action@v4.0.1
+
+      # Report-only. Finding orphans is not a failure; this step fails only if
+      # the sweep itself is incomplete, since a partial sweep would report
+      # false orphans.
+      - name: Reconcile against upstream
+        shell: bash
+        run: task animethemes:reconcile
+
+      - name: Summarise
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=.cache/reconcile.json
+          orphaned=$(jq '.orphaned | length' "$report")
+          missing=$(jq '.missing | length' "$report")
+          {
+            echo "## Reconcile"
+            echo
+            echo "| | count |"
+            echo "|---|---|"
+            echo "| manifest entries | $(jq '.manifestTotal' "$report") |"
+            echo "| upstream anime | $(jq '.upstreamTotal' "$report") |"
+            echo "| orphaned (gone upstream) | ${orphaned} |"
+            echo "| missing (not yet tracked) | ${missing} |"
+            echo
+            if [ "$orphaned" -gt 0 ]; then
+              echo "### Orphaned ids"
+              echo
+              jq -r '.orphaned[] | "- \(.)"' "$report"
+              echo
+              echo "Re-run this workflow with **prune** enabled to delete them."
+              echo
+            fi
+            if [ "$missing" -gt 0 ]; then
+              echo "### Missing ids"
+              echo
+              jq -r '.missing[] | "- \(.)"' "$report"
+              echo
+              echo "Run the **Full refresh** workflow to pick them up."
+              echo
+            fi
+            if [ "$orphaned" -eq 0 ] && [ "$missing" -eq 0 ]; then
+              echo "Manifest is in sync with upstream."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reconcile report
+        uses: actions/upload-artifact@v7
+        with:
+          name: reconcile-report
+          path: .cache/reconcile.json
+          if-no-files-found: error
+          retention-days: 14
+
+      # Deletion is opt-in: manual dispatch with prune=true only. Reuses the
+      # report written above, so it costs no extra API requests.
+      - name: Prune orphaned entries
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.prune == 'true'
+        shell: bash
+        env:
+          ANIMETHEMES_PRUNE_MAX_PERCENT: ${{ github.event.inputs.max_percent || '1' }}
+        run: task animethemes:prune PRUNE=1
+
+      - name: Commit deletions
+        id: auto-commit-action
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.prune == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          file_pattern: 'data/*.json'
+          commit_message: 'chore(reconcile): prune anime removed upstream'
+
+      # Republish so Pages stops serving the deleted files.
+      - name: Upload pages artifact
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./data
+
+      - name: Deploy to GitHub Pages
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5

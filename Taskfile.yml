@@ -224,7 +224,11 @@ tasks:
 
             data {
               id
-              name
+              title {
+                romaji
+                english
+                native
+              }
               slug
               synopsis
               format
@@ -272,8 +276,10 @@ tasks:
 
                 song {
                   id
-                  title
-                  titleNative
+                  title {
+                    romaji
+                    native
+                  }
                 }
 
                 animethemeentries(first: 1000) {
@@ -439,14 +445,14 @@ tasks:
           ) {
             paginatorInfo { currentPage lastPage hasMorePages total }
             data {
-              id name slug synopsis format season year createdAt updatedAt
+              id title { romaji english native } slug synopsis format season year createdAt updatedAt
               resources { nodes { site externalId } }
               images(first: 100) { nodes { id facet path } }
               studios(first: 100) { nodes { id name slug } }
               series(first: 100) { nodes { id name slug } }
               animethemes(first: 1000) {
                 id slug type sequence
-                song { id title titleNative }
+                song { id title { romaji native } }
                 animethemeentries(first: 1000) {
                   id version episodes nsfw spoiler
                   videos(first: 1000) {
@@ -688,6 +694,296 @@ tasks:
         echo "Done. Manifest: ${total} entries (${new_count} new, ${updated_count} updated, ${unchanged_count} unchanged, ${kept_count} kept from previous run)."
 
         rm -rf "$cache_dir"
+
+  animethemes:reconcile:
+    desc: Report manifest entries that no longer exist upstream
+    summary: |
+      Requires: curl, jq
+      Enumerates every upstream anime id with a minimal `{ id }` query
+      (~1 KB per page, versus ~600 KB for a full data page) and diffs the
+      result against data/manifest.json. Writes .cache/reconcile.json:
+
+        {"upstreamTotal": N, "manifestTotal": M,
+         "orphaned": [ids in the manifest but no longer upstream],
+         "missing":  [ids upstream but not in the manifest]}
+
+      Finding orphans is NOT an error — this task exits 0 so a scheduled run
+      never fails the build. It exits non-zero only when the sweep itself is
+      incomplete, because a partial sweep would report false orphans.
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        manifest_path="./data/manifest.json"
+        if [ ! -f "$manifest_path" ]; then
+          echo "No manifest at ${manifest_path}. Run 'task animethemes:fetch' first." >&2
+          exit 1
+        fi
+
+        page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
+        workers="${ANIMETHEMES_DOWNLOAD_WORKERS:-4}"
+        if ! [[ "$workers" =~ ^[1-9][0-9]*$ ]]; then
+          workers=4
+        fi
+
+        work_dir="$(mktemp -d)"
+        trap 'rm -rf "$work_dir"' EXIT
+        pages_dir="$work_dir/pages"
+        mkdir -p "$pages_dir"
+
+        # CREATED_AT: the id set is sort-independent, but a stable sort keeps
+        # page boundaries from shifting mid-sweep as anime are updated.
+        probe_payload=$(
+          jq -nc --argjson first "$page_size" '
+            {query:"query Probe($first: Int!) { animePagination(first: $first, page: 1, sort: CREATED_AT) { paginatorInfo { lastPage total } } }",
+             variables:{first:$first},
+             operationName:"Probe"}'
+        )
+
+        probe_file="$work_dir/probe.json"
+        curl --fail --max-time 30 --connect-timeout 10 --http1.1 -sS \
+          -X POST "${ANIMETHEMES_ENDPOINT}" \
+          -H 'Content-Type: application/json' \
+          -H 'Accept: application/json' \
+          -H "Origin: ${ANIMETHEMES_ENDPOINT%/}" \
+          -H "Referer: ${ANIMETHEMES_ENDPOINT}" \
+          -H 'User-Agent: animethemes-moe-tracker/1.0' \
+          --data "$probe_payload" \
+          -o "$probe_file"
+
+        last_page=$(jq -r '.data.animePagination.paginatorInfo.lastPage // "null"' "$probe_file")
+        upstream_total=$(jq -r '.data.animePagination.paginatorInfo.total // "null"' "$probe_file")
+        if ! [[ "$last_page" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Reconcile: probe returned no usable lastPage:" >&2
+          cat "$probe_file" >&2
+          exit 1
+        fi
+        if [ "$workers" -gt "$last_page" ]; then
+          workers="$last_page"
+        fi
+
+        echo "Reconcile: sweeping ${last_page} page(s) of ids (upstream total: ${upstream_total})."
+
+        worker="$work_dir/fetch_ids.sh"
+        cat > "$worker" <<'WORKER'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        page="$1"
+        endpoint="${ANIMETHEMES_ENDPOINT:?}"
+        page_size="${ANIMETHEMES_PAGE_SIZE:-100}"
+        pages_dir="${PAGES_DIR:?}"
+
+        payload="$(jq -nc --argjson page "$page" --argjson first "$page_size" '
+          {query:"query Ids($page: Int!, $first: Int!) { animePagination(first: $first, page: $page, sort: CREATED_AT) { data { id } } }",
+           variables:{page:$page,first:$first},
+           operationName:"Ids"}')"
+
+        tmp_response="$(mktemp)"
+        trap 'rm -f "$tmp_response"' EXIT
+
+        attempt=1
+        max_attempts=4
+        success=0
+        while [ "$attempt" -le "$max_attempts" ]; do
+          if curl --fail --max-time 30 --connect-timeout 10 --http1.1 -sS \
+              -X POST "$endpoint" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              -H "Origin: ${endpoint%/}" \
+              -H "Referer: $endpoint" \
+              -H 'User-Agent: animethemes-moe-tracker/1.0' \
+              --data "$payload" \
+              -o "$tmp_response"; then
+            success=1
+            break
+          fi
+          echo "Reconcile page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          attempt=$((attempt + 1))
+          sleep $((attempt * 2))
+        done
+
+        if [ "$success" -ne 1 ]; then
+          echo "Reconcile page ${page}: giving up after ${max_attempts} attempts." >&2
+          exit 1
+        fi
+
+        if [ "$(jq -r '(.data.animePagination.data | type) // "missing"' "$tmp_response")" != "array" ]; then
+          echo "Reconcile page ${page}: response contained no data array." >&2
+          head -c 500 "$tmp_response" >&2
+          echo >&2
+          exit 1
+        fi
+
+        jq -r '.data.animePagination.data[].id' "$tmp_response" > "$pages_dir/${page}.ids"
+        WORKER
+        chmod +x "$worker"
+
+        export ANIMETHEMES_ENDPOINT
+        export ANIMETHEMES_PAGE_SIZE
+        export PAGES_DIR="$pages_dir"
+
+        seq 1 "$last_page" | xargs -P "$workers" -n 1 "$worker"
+
+        swept=$(ls "$pages_dir"/*.ids 2>/dev/null | wc -l)
+        if [ "$swept" -ne "$last_page" ]; then
+          echo "Reconcile: only swept ${swept}/${last_page} pages; refusing to report a partial diff." >&2
+          exit 1
+        fi
+
+        ids_file="$work_dir/upstream.ids"
+        cat "$pages_dir"/*.ids | sort -n -u > "$ids_file"
+
+        mkdir -p .cache
+        report=".cache/reconcile.json"
+        jq -n \
+          --rawfile ids "$ids_file" \
+          --slurpfile man "$manifest_path" \
+          --arg generated_at "$(date -u +%s)" \
+          '
+            ($ids | split("\n") | map(select(length > 0) | tonumber)) as $upstream
+            | ($upstream | map({key:(.|tostring), value:true}) | from_entries) as $up_set
+            | ($man[0]) as $entries
+            | ($entries | map({key:(.id|tostring), value:true}) | from_entries) as $man_set
+            | {
+                generatedAt: ($generated_at | tonumber),
+                upstreamTotal: ($upstream | length),
+                manifestTotal: ($entries | length),
+                orphaned: ($entries | map(select($up_set[.id|tostring] | not) | .id) | sort),
+                missing:  ($upstream | map(select($man_set[.|tostring] | not)) | sort)
+              }
+          ' > "$report"
+
+        orphaned_count=$(jq '.orphaned | length' "$report")
+        missing_count=$(jq '.missing | length' "$report")
+        manifest_total=$(jq '.manifestTotal' "$report")
+
+        echo "Reconcile: manifest ${manifest_total} entries vs upstream ${upstream_total}."
+        echo "  orphaned (gone upstream): ${orphaned_count}"
+        echo "  missing (not yet tracked): ${missing_count}"
+        if [ "$orphaned_count" -gt 0 ]; then
+          echo "  orphaned ids: $(jq -r '.orphaned | join(", ")' "$report")"
+          echo "  -> remove with: task animethemes:prune PRUNE=1"
+        fi
+        if [ "$missing_count" -gt 0 ]; then
+          echo "  missing ids: $(jq -r '.missing | join(", ")' "$report")"
+          echo "  -> pick up with: task animethemes:fetch"
+        fi
+        echo "Report written to ${report}."
+
+  animethemes:prune:
+    desc: Delete tracked anime that no longer exist upstream (opt-in)
+    summary: |
+      Requires: curl, jq
+      Runs a reconcile sweep, then for every orphaned id:
+        - deletes data/<id>.json
+        - drops its entry from data/manifest.json
+
+      Deliberately opt-in: dry-runs unless PRUNE=1 (accepts 1/true).
+
+      Consumes the report from a preceding `animethemes:reconcile` run rather
+      than sweeping again, so a prune costs no extra API requests:
+
+        task animethemes:reconcile && task animethemes:prune PRUNE=1
+
+      Guarded three ways:
+        - PRUNE=1 must be passed explicitly (otherwise it dry-runs)
+        - the report must be newer than ANIMETHEMES_PRUNE_MAX_REPORT_AGE
+          seconds (default 3600), so a stale sweep can't drive deletions
+        - orphans must not exceed ANIMETHEMES_PRUNE_MAX_PERCENT (default 1)
+          of the manifest, so an upstream incident cannot mass-delete the
+          corpus. Raise it only after confirming the deletions are genuine.
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+
+        report=".cache/reconcile.json"
+        manifest_path="./data/manifest.json"
+        if [ ! -f "$report" ]; then
+          echo "No ${report}. Run 'task animethemes:reconcile' first." >&2
+          exit 1
+        fi
+
+        max_age="${ANIMETHEMES_PRUNE_MAX_REPORT_AGE:-3600}"
+        generated_at=$(jq -r '.generatedAt // 0' "$report")
+        age=$(( $(date -u +%s) - generated_at ))
+        if [ "$generated_at" -le 0 ]; then
+          echo "Report ${report} has no generatedAt; re-run 'task animethemes:reconcile'." >&2
+          exit 1
+        fi
+        if [ "$age" -gt "$max_age" ]; then
+          echo "Report ${report} is ${age}s old (limit ${max_age}s); re-run 'task animethemes:reconcile'." >&2
+          exit 1
+        fi
+
+        orphaned_count=$(jq '.orphaned | length' "$report")
+        manifest_total=$(jq '.manifestTotal' "$report")
+
+        if [ "$orphaned_count" -eq 0 ]; then
+          echo "Prune: no orphaned entries. Nothing to do."
+          exit 0
+        fi
+
+        max_percent="${ANIMETHEMES_PRUNE_MAX_PERCENT:-1}"
+        if ! [[ "$max_percent" =~ ^[0-9]+$ ]]; then
+          echo "Invalid ANIMETHEMES_PRUNE_MAX_PERCENT: '${max_percent}' (expected an integer)." >&2
+          exit 1
+        fi
+
+        # Scaled integer comparison: orphans/total > max/100.
+        if [ "$manifest_total" -le 0 ] || [ $((orphaned_count * 100)) -gt $((max_percent * manifest_total)) ]; then
+          echo "Prune: refusing to delete ${orphaned_count}/${manifest_total} entries — exceeds ${max_percent}% guard." >&2
+          echo "Verify upstream is healthy, then re-run with ANIMETHEMES_PRUNE_MAX_PERCENT set higher." >&2
+          exit 1
+        fi
+
+        # Task var, so both `task animethemes:prune PRUNE=1` (matching PAGE on
+        # download:page) and an exported PRUNE resolve here.
+        prune="{{.PRUNE}}"
+        case "$prune" in
+          1|true)     prune=1 ;;
+          ''|0|false) prune=0 ;;
+          *)
+            echo "Invalid PRUNE: '${prune}' (expected 1/true or 0/false)." >&2
+            exit 1
+            ;;
+        esac
+
+        if [ "$prune" -ne 1 ]; then
+          echo "Prune: ${orphaned_count} orphaned entr(y/ies) would be deleted:"
+          jq -r '.orphaned[] | "  - data/\(.).json"' "$report"
+          echo "Dry run. Re-run with PRUNE=1 to apply."
+          echo "  task animethemes:prune PRUNE=1"
+          exit 0
+        fi
+
+        deleted=0
+        while read -r id; do
+          [ -n "$id" ] || continue
+          if [ -f "./data/${id}.json" ]; then
+            rm -f "./data/${id}.json"
+            echo "Deleted data/${id}.json"
+            deleted=$((deleted + 1))
+          else
+            echo "data/${id}.json already absent; dropping manifest entry only."
+          fi
+        done < <(jq -r '.orphaned[]' "$report")
+
+        tmp_manifest="$(mktemp)"
+        trap 'rm -f "$tmp_manifest"' EXIT
+        jq \
+          --slurpfile rep "$report" \
+          '
+            (($rep[0].orphaned) | map({key:(.|tostring), value:true}) | from_entries) as $drop
+            | map(select($drop[.id|tostring] | not))
+            | sort_by(.id)
+          ' "$manifest_path" > "$tmp_manifest"
+        mv "$tmp_manifest" "$manifest_path"
+        trap - EXIT
+
+        remaining=$(jq 'length' "$manifest_path")
+        echo "Pruned ${deleted} file(s). Manifest: ${remaining} entries."
 
   animethemes:clean:
     desc: Remove cache and generated data directories
