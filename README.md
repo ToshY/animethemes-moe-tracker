@@ -15,7 +15,7 @@ All data is retrieved from the [animethemes.moe GraphQL API](https://graphql.ani
 
 - One file per anime: [`./data/<id>.json`](./data), where `<id>` is the upstream `Anime.id` from animethemes.moe.
 - Each file is the raw GraphQL `Anime` node, minified and byte-deterministic. It contains:
-  - core fields: `id`, `name`, `slug`, `synopsis`, `format`, `season`, `year`, `createdAt`, `updatedAt`
+  - core fields: `id`, `title` (`romaji`, `english`, `native`), `slug`, `synopsis`, `format`, `season`, `year`, `createdAt`, `updatedAt`
   - `resources` (external IDs incl. MAL, AniList, Kitsu, …)
   - `images`, `studios`, `series`
   - `animethemes[]` with `song`, `animethemeentries[]`, and full `videos[]` metadata (`resolution`, `source`, `nc`, `subbed`, `lyrics`, `overlap`, …) plus per-video `audio`
@@ -39,6 +39,7 @@ Per-anime files are only overwritten when their `sha256` changes; otherwise `upd
 |---|---|---|
 | `tracker.yml` | cron `0 0 * * *` + `workflow_dispatch` | Pulls the first N pages of `animePagination(sort: UPDATED_AT_DESC)` (default 1 page = 100 anime) and merges them into the manifest. Cheap, fast, idempotent. |
 | `full-refresh.yml` | `workflow_dispatch` only | Probes pagination, fans out a matrix job per page (~49 jobs × 100 anime), merges all artifacts and rebuilds the manifest. |
+| `reconcile.yml` | cron `0 3 * * 1` + `workflow_dispatch` | Sweeps every upstream anime id with a minimal `{ id }` query (~1 KB per page) and diffs it against the manifest, reporting anime that were **removed upstream** (orphans) or are not yet tracked. Report-only by default — orphans never fail the run. Deleting them is opt-in via `workflow_dispatch` with `prune` enabled. |
 
 Scheduled cron times may be [delayed](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule) by GitHub Actions.
 
