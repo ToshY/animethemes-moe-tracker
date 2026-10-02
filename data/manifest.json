@@ -39579,17 +39579,17 @@
     "id": 4968,
     "malID": 63337,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4968.json",
-    "sha256": "8e68a298137cb0bab1a72b8d61e6ec86ee4744e8ab6c5b062f16ec28c79885b4",
+    "sha256": "d65408168800fb8141fdd684df28a38883be2df6cac81816d5337d7fb1d5f89b",
     "createdAt": "2026-09-28T02:32:10Z",
-    "updatedAt": "2026-09-28T02:32:10Z"
+    "updatedAt": "2026-10-02T03:05:47Z"
   },
   {
     "id": 4969,
     "malID": 64180,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4969.json",
-    "sha256": "dab8836b7fdcfb42746884cd3eff0fa59c2e815165121b9302a7766ffa650022",
+    "sha256": "b32511a23e95e944f1ef534c33e9b943f82deeb7093259509fb7b6d188a8851d",
     "createdAt": "2026-09-28T02:32:10Z",
-    "updatedAt": "2026-09-28T02:32:10Z"
+    "updatedAt": "2026-10-02T03:05:47Z"
   },
   {
     "id": 4970,
@@ -39606,5 +39606,37 @@
     "sha256": "693f9e033617f1b62e8203fcbb91dcc0d9e070aeaa436a694a61c2666d5fe324",
     "createdAt": "2026-10-01T03:03:29Z",
     "updatedAt": "2026-10-01T03:03:29Z"
+  },
+  {
+    "id": 4972,
+    "malID": 52480,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4972.json",
+    "sha256": "263eb3a27a32d4a2085487e6a59a1aacec5115fe242b818b2c4b83b05b5e0fb9",
+    "createdAt": "2026-10-02T03:05:47Z",
+    "updatedAt": "2026-10-02T03:05:47Z"
+  },
+  {
+    "id": 4973,
+    "malID": 57612,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4973.json",
+    "sha256": "b44d6d7342ca4e1dbd59d38457fcde4548b6c5b8b2eaa4928a1d51bcfe0daba6",
+    "createdAt": "2026-10-02T03:05:47Z",
+    "updatedAt": "2026-10-02T03:05:47Z"
+  },
+  {
+    "id": 4974,
+    "malID": 61323,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4974.json",
+    "sha256": "55fff033d7e74b81880d37681b8f95a14e60b1a64d3e205e4da2c03cd8eaf668",
+    "createdAt": "2026-10-02T03:05:47Z",
+    "updatedAt": "2026-10-02T03:05:47Z"
+  },
+  {
+    "id": 4975,
+    "malID": 64534,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4975.json",
+    "sha256": "a3068fb66db40aa355f174abe466e6df315aaba055b37688ee28116d2b97076b",
+    "createdAt": "2026-10-02T03:05:47Z",
+    "updatedAt": "2026-10-02T03:05:47Z"
   }
 ]
