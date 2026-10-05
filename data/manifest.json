@@ -39563,9 +39563,9 @@
     "id": 4966,
     "malID": 60601,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4966.json",
-    "sha256": "47cea561263ba6718ca4b37712b2bbfa863d59e797bf006bdcc3f7d3a800392c",
+    "sha256": "5f8361cd066991ca9c0c78e0dc035ad66baa168cbfdeda67c873d9477ecd3f7c",
     "createdAt": "2026-09-28T02:32:10Z",
-    "updatedAt": "2026-10-03T02:52:26Z"
+    "updatedAt": "2026-10-05T02:59:09Z"
   },
   {
     "id": 4967,
@@ -39627,9 +39627,9 @@
     "id": 4974,
     "malID": 61323,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4974.json",
-    "sha256": "8551313551f5bae86e2a51009ec64609f7e722006c5b32dffaaee0cf63893fa8",
+    "sha256": "a96d491d5dcf5a96b4a24a0d7c7b1a97f40c9bcf6435cb8208f7c5eead44b16f",
     "createdAt": "2026-10-02T03:05:47Z",
-    "updatedAt": "2026-10-03T02:52:26Z"
+    "updatedAt": "2026-10-05T02:59:09Z"
   },
   {
     "id": 4975,
@@ -39755,25 +39755,25 @@
     "id": 4990,
     "malID": 61603,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4990.json",
-    "sha256": "54efb75b386c63555b941af5fb41d95a3901800bce8b49c8042747e397cd551d",
+    "sha256": "dfa02d0a617d1bd52cd4bc216836c37a6b3f70b7e00a7c99163c2ad1973d1f13",
     "createdAt": "2026-10-04T03:22:16Z",
-    "updatedAt": "2026-10-04T03:22:16Z"
+    "updatedAt": "2026-10-05T02:59:09Z"
   },
   {
     "id": 4991,
     "malID": 60948,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4991.json",
-    "sha256": "cbcbb85068a9131185890de5356e3a7b48cbe079cb4228370e200307da15ffe8",
+    "sha256": "e9e52668acb53f8c416899c23b8b401f0052d429854506698a03534f2a5bcd60",
     "createdAt": "2026-10-04T03:22:16Z",
-    "updatedAt": "2026-10-04T03:22:16Z"
+    "updatedAt": "2026-10-05T02:59:09Z"
   },
   {
     "id": 4992,
     "malID": 62907,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4992.json",
-    "sha256": "d533beb88cb45ff7f96641cb55227eb8b6b4a68797abc873794f94bb71e2e763",
+    "sha256": "5c42da39034453fe5458434ac17f050b63c10dd2a119cffe87d78b435cf3bc01",
     "createdAt": "2026-10-04T03:22:16Z",
-    "updatedAt": "2026-10-04T03:22:16Z"
+    "updatedAt": "2026-10-05T02:59:09Z"
   },
   {
     "id": 4993,
@@ -39782,5 +39782,53 @@
     "sha256": "c153f0429049ce51abe1eff6fddf09865b2465c51ace97ed8511f7140711dc5c",
     "createdAt": "2026-10-04T03:22:16Z",
     "updatedAt": "2026-10-04T03:22:16Z"
+  },
+  {
+    "id": 4994,
+    "malID": 64254,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4994.json",
+    "sha256": "8b0a7f2deaf39b237daa0bf78d04494fee5d8e4e4ca0d48622724d4ac8efd23e",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
+  },
+  {
+    "id": 4995,
+    "malID": 63754,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4995.json",
+    "sha256": "f0b7be6ca1a970489da9da29d6378a1ec277544759a82f5de5f1d11e46dd62e9",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
+  },
+  {
+    "id": 4996,
+    "malID": 63509,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4996.json",
+    "sha256": "2fd1f5b46fe974d0b41ae77ef1fba3c6dd5df6d15b920ffd53708fec41731d77",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
+  },
+  {
+    "id": 4997,
+    "malID": 63751,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4997.json",
+    "sha256": "6c5c230441dfa157b9116217c320d9eaf1f6f75fc9dad338522f156b9410734e",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
+  },
+  {
+    "id": 4998,
+    "malID": 62753,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4998.json",
+    "sha256": "e4c3dfbf7ef1eb72555248e8c5fff0fcc79f6c2f78f97144690dbb57d60c73a2",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
+  },
+  {
+    "id": 4999,
+    "malID": 62590,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/4999.json",
+    "sha256": "847c23bcb99f6c5ea506957c23748465f933c873d8469bfa290f01e0ffc25fd5",
+    "createdAt": "2026-10-05T02:59:09Z",
+    "updatedAt": "2026-10-05T02:59:09Z"
   }
 ]
