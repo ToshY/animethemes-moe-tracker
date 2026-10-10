@@ -39651,25 +39651,25 @@
     "id": 4977,
     "malID": 65009,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4977.json",
-    "sha256": "4bdfe81368ed5f562f43873827fd6e84c53e44ce78b4bd5b25a55e95b9c0ba85",
+    "sha256": "678c6de539e09c8efd44f4862591d4698f03273236ca04039a9b66ac332123f2",
     "createdAt": "2026-10-03T02:52:26Z",
-    "updatedAt": "2026-10-03T02:52:26Z"
+    "updatedAt": "2026-10-10T03:18:13Z"
   },
   {
     "id": 4978,
     "malID": 63181,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4978.json",
-    "sha256": "abc8053a950cd2d36abdad48f21c605b50b36e65afc1da88a0c3371191b185cd",
+    "sha256": "dfa45d0207a1dd93324d1ccd06952cb9882d1dfe7650c367b8ffc1aef1e4d9e5",
     "createdAt": "2026-10-03T02:52:26Z",
-    "updatedAt": "2026-10-09T03:37:09Z"
+    "updatedAt": "2026-10-10T03:18:13Z"
   },
   {
     "id": 4979,
     "malID": 63157,
     "url": "https://toshy.github.io/animethemes-moe-tracker/4979.json",
-    "sha256": "fe20fe3a425f150b8c073f2845e08cdfbbe1e694421ef913fb65e81948e21222",
+    "sha256": "20cd661ab6e6e843d8cec8272695f1ffdd42833ac58f4baeb9c35a8fbeb820d3",
     "createdAt": "2026-10-03T02:52:26Z",
-    "updatedAt": "2026-10-03T02:52:26Z"
+    "updatedAt": "2026-10-10T03:18:13Z"
   },
   {
     "id": 4980,
@@ -39974,5 +39974,21 @@
     "sha256": "6cdc4f08242cec855e17bbef665938977725c40c669aaa6f6796bc59d0f23b0c",
     "createdAt": "2026-10-09T03:37:09Z",
     "updatedAt": "2026-10-09T03:37:09Z"
+  },
+  {
+    "id": 5018,
+    "malID": 61014,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/5018.json",
+    "sha256": "df9f36008daf80fca609166c11224e4555337aa0cd5e2e1071e5fa10d6446bc1",
+    "createdAt": "2026-10-10T03:18:13Z",
+    "updatedAt": "2026-10-10T03:18:13Z"
+  },
+  {
+    "id": 5019,
+    "malID": 63293,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/5019.json",
+    "sha256": "d3a6db5bb8cd22fa2fd79a438db034f7bc35a9d35ddb1cbebb25945b2dff053c",
+    "createdAt": "2026-10-10T03:18:13Z",
+    "updatedAt": "2026-10-10T03:18:13Z"
   }
 ]
