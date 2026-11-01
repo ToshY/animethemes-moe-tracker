@@ -5,6 +5,10 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  # Weekly: song-level edits (e.g. performances/artists) don't bump the parent anime's updatedAt, so the daily incremental run never sees them.
+  # Sunday 12:00 UTC keeps clear of tracker.yml (00:00) and reconcile.yml (Monday 03:00).
+  schedule:
+    - cron: '0 12 * * 0'
   workflow_dispatch:
 
 permissions:

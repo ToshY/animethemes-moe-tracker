@@ -7,6 +7,48 @@ env:
   ANIMETHEMES_PAGE_SIZE: '100'
   ANIMETHEMES_HEALTHCHECK_TIMEOUT_SECONDS: '10'
 
+vars:
+  # Single source of truth for the per-anime payload, shared by
+  # animethemes:download:page and animethemes:download (`__SORT__` is replaced
+  # per run). Field order defines the key order of data/<id>.json, and every
+  # nested list that can hold several items in arbitrary order is sorted
+  # explicitly (song performances: RELEVANCE, then ID) so files stay
+  # byte-deterministic.
+  ANIME_QUERY: |
+    query GetAnime($page: Int!, $first: Int!) {
+      animePagination(first: $first, page: $page, sort: __SORT__) {
+        paginatorInfo { currentPage lastPage hasMorePages total }
+        data {
+          id title { romaji english native } slug synopsis format season year createdAt updatedAt
+          resources { nodes { site externalId } }
+          images(first: 100) { nodes { id facet path } }
+          studios(first: 100) { nodes { id name slug } }
+          series(first: 100) { nodes { id name slug } }
+          animethemes(first: 1000) {
+            id slug type sequence
+            song {
+              id title { romaji native }
+              performances(first: 100, sort: [RELEVANCE, ID]) {
+                alias as memberAlias memberAs relevance
+                artist { id slug name { main native } }
+                member { id slug name { main native } }
+              }
+            }
+            animethemeentries(first: 1000) {
+              id version episodes nsfw spoiler
+              videos(first: 1000) {
+                nodes {
+                  id basename filename link mimetype size resolution
+                  nc subbed lyrics overlap source tags
+                  audio { id basename filename link mimetype size }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
 tasks:
   default:
     cmds:
@@ -207,117 +249,7 @@ tasks:
         outfile="$cache_dir/${page}.json"
 
         query=$(cat <<'GQL'
-        query GetAnime($page: Int!, $first: Int!) {
-          animePagination(
-            first: $first
-            page: $page
-            sort: __SORT__
-          ) {
-            paginatorInfo {
-              currentPage
-              lastPage
-              hasMorePages
-              total
-            }
-
-            data {
-              id
-              title {
-                romaji
-                english
-                native
-              }
-              slug
-              synopsis
-              format
-              season
-              year
-              createdAt
-              updatedAt
-
-              resources {
-                nodes {
-                  site
-                  externalId
-                }
-              }
-
-              images(first: 100) {
-                nodes {
-                  id
-                  facet
-                  path
-                }
-              }
-
-              studios(first: 100) {
-                nodes {
-                  id
-                  name
-                  slug
-                }
-              }
-
-              series(first: 100) {
-                nodes {
-                  id
-                  name
-                  slug
-                }
-              }
-
-              animethemes(first: 1000) {
-                id
-                slug
-                type
-                sequence
-
-                song {
-                  id
-                  title {
-                    romaji
-                    native
-                  }
-                }
-
-                animethemeentries(first: 1000) {
-                  id
-                  version
-                  episodes
-                  nsfw
-                  spoiler
-
-                  videos(first: 1000) {
-                    nodes {
-                      id
-                      basename
-                      filename
-                      link
-                      mimetype
-                      size
-                      resolution
-                      nc
-                      subbed
-                      lyrics
-                      overlap
-                      source
-                      tags
-
-                      audio {
-                        id
-                        basename
-                        filename
-                        link
-                        mimetype
-                        size
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+        {{.ANIME_QUERY}}
         GQL
         )
         query=${query//__SORT__/$sort_col}
@@ -350,10 +282,24 @@ tasks:
               -H "Referer: ${ANIMETHEMES_ENDPOINT}" \
               --data "$payload" \
               -o "$tmp_response"; then
+            # A GraphQL error nulls the failing object up to its nearest
+            # nullable parent (one bad nested field can drop a whole `song`),
+            # so a response with errors is retried and never written.
+            error_count=$(jq -r '(.errors // []) | length' "$tmp_response" 2>/dev/null || echo invalid)
+          else
+            error_count=curl
+          fi
+          # Keep `break` one `if` deep: Task's shell (mvdan/sh) does not stop
+          # the loop body when `break` sits in a nested `if`.
+          if [ "$error_count" = "0" ]; then
             success=1
             break
           fi
-          echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          if [ "$error_count" = "curl" ]; then
+            echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          else
+            echo "Page ${page}: GraphQL returned ${error_count} error(s) (attempt ${attempt}/${max_attempts}): $(jq -c '[.errors[0].message, .errors[0].path]' "$tmp_response" 2>/dev/null | head -c 300)" >&2
+          fi
           attempt=$((attempt + 1))
           sleep $((attempt * 2))
         done
@@ -369,11 +315,6 @@ tasks:
           head -c 500 "$tmp_response" >&2
           echo >&2
           exit 1
-        fi
-
-        has_errors=$(jq -r '(.errors // null) | tojson' "$tmp_response" 2>/dev/null || echo null)
-        if [ "$has_errors" != "null" ]; then
-          echo "Page ${page}: GraphQL returned partial errors (continuing): ${has_errors}" >&2
         fi
 
         jq -c . "$tmp_response" > "$outfile"
@@ -434,36 +375,7 @@ tasks:
 
         query_file="$work_dir/query.graphql"
         cat > "$query_file" <<'GQL'
-        query GetAnime($page: Int!, $first: Int!) {
-          animePagination(
-            first: $first
-            page: $page
-            sort: __SORT__
-          ) {
-            paginatorInfo { currentPage lastPage hasMorePages total }
-            data {
-              id title { romaji english native } slug synopsis format season year createdAt updatedAt
-              resources { nodes { site externalId } }
-              images(first: 100) { nodes { id facet path } }
-              studios(first: 100) { nodes { id name slug } }
-              series(first: 100) { nodes { id name slug } }
-              animethemes(first: 1000) {
-                id slug type sequence
-                song { id title { romaji native } }
-                animethemeentries(first: 1000) {
-                  id version episodes nsfw spoiler
-                  videos(first: 1000) {
-                    nodes {
-                      id basename filename link mimetype size resolution
-                      nc subbed lyrics overlap source tags
-                      audio { id basename filename link mimetype size }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+        {{.ANIME_QUERY}}
         GQL
         sed -i "s/__SORT__/${sort_col}/" "$query_file"
 
@@ -503,10 +415,21 @@ tasks:
               -H "Referer: $endpoint" \
               --data "$payload" \
               -o "$tmp_response"; then
+            # Same rule as animethemes:download:page: never keep a response
+            # with GraphQL errors (they null out whole parent objects).
+            error_count="$(jq -r '(.errors // []) | length' "$tmp_response" 2>/dev/null || echo invalid)"
+          else
+            error_count=curl
+          fi
+          if [ "$error_count" = "0" ]; then
             success=1
             break
           fi
-          echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          if [ "$error_count" = "curl" ]; then
+            echo "Page ${page}: curl failed (attempt ${attempt}/${max_attempts})." >&2
+          else
+            echo "Page ${page}: GraphQL returned ${error_count} error(s) (attempt ${attempt}/${max_attempts})." >&2
+          fi
           attempt=$((attempt + 1))
           sleep $((attempt * 2))
         done

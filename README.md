@@ -18,7 +18,7 @@ All data is retrieved from the [animethemes.moe GraphQL API](https://graphql.ani
   - core fields: `id`, `title` (`romaji`, `english`, `native`), `slug`, `synopsis`, `format`, `season`, `year`, `createdAt`, `updatedAt`
   - `resources` (external IDs incl. MAL, AniList, Kitsu, …)
   - `images`, `studios`, `series`
-  - `animethemes[]` with `song`, `animethemeentries[]`, and full `videos[]` metadata (`resolution`, `source`, `nc`, `subbed`, `lyrics`, `overlap`, …) plus per-video `audio`
+  - `animethemes[]` with `song` (incl. `performances[]`: credited `artist` / `member` names, `alias`, `as`, `relevance`), `animethemeentries[]`, and full `videos[]` metadata (`resolution`, `source`, `nc`, `subbed`, `lyrics`, `overlap`, …) plus per-video `audio`
 
 ### Manifest
 
@@ -38,7 +38,7 @@ Per-anime files are only overwritten when their `sha256` changes; otherwise `upd
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `tracker.yml` | cron `0 0 * * *` + `workflow_dispatch` | Pulls the first N pages of `animePagination(sort: UPDATED_AT_DESC)` (default 1 page = 100 anime) and merges them into the manifest. Cheap, fast, idempotent. |
-| `full-refresh.yml` | `workflow_dispatch` only | Probes pagination, fans out a matrix job per page (~49 jobs × 100 anime), merges all artifacts and rebuilds the manifest. |
+| `full-refresh.yml` | cron `0 12 * * 0` (weekly) + `workflow_dispatch` | Probes pagination, fans out a matrix job per page (~51 jobs × 100 anime), merges all artifacts and rebuilds the manifest. Catches song-level edits (e.g. artists), which don't change an anime's `updatedAt` and are therefore invisible to the incremental run. |
 | `reconcile.yml` | cron `0 3 * * 1` + `workflow_dispatch` | Sweeps every upstream anime id with a minimal `{ id }` query (~1 KB per page) and diffs it against the manifest, reporting anime that were **removed upstream** (orphans) or are not yet tracked. Report-only by default — orphans never fail the run. Deleting them is opt-in via `workflow_dispatch` with `prune` enabled. |
 
 Scheduled cron times may be [delayed](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule) by GitHub Actions.
@@ -51,7 +51,7 @@ Scheduled cron times may be [delayed](https://docs.github.com/en/actions/writing
 
 ### 📅 Releases
 
-- [Releases](https://github.com/ToshY/animethemes-moe-tracker/releases) are created on every run that produces a change, tagged as `YYYY.MM.DD-<run_id>` (`-full` suffix for full refreshes).
+- [Releases](https://github.com/ToshY/animethemes-moe-tracker/releases) are created on every run that produces a change, tagged as `YYYY.MM.DD-<run_id>`. The title marks the trigger: 🤖 scheduled incremental, ✍️ manual incremental, 🔄 full refresh.
 
 ## ℹ️ Disclaimer
 
@@ -65,7 +65,7 @@ This repository is a **metadata index**, not a media archive:
 - The published JSON files contain anime, theme, song, entry and video **metadata** (titles, IDs, slugs, resolutions, source flags, etc.) and **URLs** that point back to animethemes.moe's own CDN.
 - No video or audio files are downloaded, re-hosted or otherwise redistributed by this project. Playback always happens on animethemes.moe's infrastructure.
 - The tracker is a small, non-commercial, read-only consumer of the public GraphQL API. It is not a search, streaming or download service and is not intended to compete with animethemes.moe or themes.moe.
-- API usage is intentionally light: a single page of recently updated anime daily (incremental), with full refreshes only on manual request and paginated at the API's standard page size.
+- API usage is intentionally light: a single page of recently updated anime daily (incremental), plus one full refresh a week (one request per page) at the API's standard page size.
 
 If you are building something that needs **bulk media** rather than metadata, please use the official [AnimeThemes.moe OP/ED Collection Full Backup](https://animethemes.moe/faq) instead of scraping the CDN.
 
