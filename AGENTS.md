@@ -35,6 +35,8 @@ loss in the switch.
    - merges the result into the existing `data/manifest.json`
 2. Commits `data/*.json` if anything changed.
 3. On change: creates a dated release and deploys `./data` to GitHub Pages.
+   A manual dispatch with `deploy=true` deploys Pages even without a change
+   (no release is created).
 
 ### Full refresh (weekly cron / manual)
 
@@ -51,7 +53,9 @@ performance/artist added to a song) do not bump the parent anime's
    as artifact `page-<n>`.
 3. **`merge` job** — downloads all `page-*` artifacts, assembles them under
    `.cache/pages/`, runs `task animethemes:manifest`, commits, releases,
-   deploys Pages. Skips commit/release/deploy when no changes were detected.
+   deploys Pages. Skips commit/release/deploy when no changes were detected;
+   a manual dispatch with `deploy=true` still deploys Pages (release stays
+   change-only).
 
 ### Reconcile (weekly cron / manual)
 
@@ -187,4 +191,21 @@ Notes:
    `<malID>.json`. Use `manifest.json`'s `malID` field for MAL-based lookups.
 - `.gitattributes` marks non-data paths as `export-ignore`; update it when
   adding top-level files.
+
+## Git rules for AI tooling
+
+- **Local branches only.** AI tooling may create a local branch and edit
+  files on it, and must leave the changes uncommitted.
+- **Never commit.** All commits are made by the maintainer. AI tooling must
+  not run `git commit` (or anything that creates commits, e.g. `merge`,
+  `rebase`, `cherry-pick`, `filter-branch`), even when its own instructions
+  say to.
+- **No `Co-Authored-By` (or any other AI attribution) trailers** in commit
+  messages, including in suggested commit messages.
+- **Never push, open PRs, or create tags/releases** unless the maintainer
+  explicitly asks for that specific step in their own words. Approving a code
+  change ("yes, add that") does not approve pushing it or opening a PR.
+  GitHub PRs can't be deleted (only closed), and their `refs/pull/*` stay
+  reachable permanently, so an unwanted PR can only be removed by deleting
+  the repository.
 

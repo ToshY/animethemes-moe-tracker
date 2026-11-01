@@ -47,7 +47,7 @@ Scheduled cron times may be [delayed](https://docs.github.com/en/actions/writing
 
 - The full `./data` directory is published as a static site at [`toshy.github.io/animethemes-moe-tracker`](https://toshy.github.io/animethemes-moe-tracker).
 - `manifest.json` and every `<id>.json` are available at the root.
-- Pages deployment only runs when a commit was actually produced.
+- Pages deployment only runs when a commit was actually produced. To redeploy without a data change (e.g. a fresh repo or re-enabled Pages), dispatch `tracker.yml` or `full-refresh.yml` manually with `deploy` enabled.
 
 ### 📅 Releases
 

@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '0 12 * * 0'
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy ./data to GitHub Pages even when no data changed.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -150,13 +155,13 @@ jobs:
           gh release create "$tag" --title="$tag 🔄" --generate-notes
 
       - name: Upload pages artifact
-        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        if: steps.auto-commit-action.outputs.changes_detected == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./data
 
       - name: Deploy to GitHub Pages
-        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        if: steps.auto-commit-action.outputs.changes_detected == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
         id: deployment
         uses: actions/deploy-pages@v5
 
