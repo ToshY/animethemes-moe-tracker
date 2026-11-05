@@ -40166,5 +40166,13 @@
     "sha256": "19f905e590547eec898c60f86034e0bc79cf5ca84cc957d18512eaeb45c901d1",
     "createdAt": "2026-11-01T21:25:11Z",
     "updatedAt": "2026-11-03T04:44:11Z"
+  },
+  {
+    "id": 5042,
+    "malID": 63019,
+    "url": "https://toshy.github.io/animethemes-moe-tracker/5042.json",
+    "sha256": "19d5a6101a81359cdf5d5e28425e19a8f5b1be0f4306eb9f827d6b80fcd0f5a7",
+    "createdAt": "2026-11-05T04:28:07Z",
+    "updatedAt": "2026-11-05T04:28:07Z"
   }
 ]
